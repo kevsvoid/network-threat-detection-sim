@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Network Threat Detection & Mitigation Simulation</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --bg0: #080c0f;
+    --bg1: #0d1318;
+    --bg2: #111920;
+    --bg3: #162028;
+    --border: rgba(0,255,180,0.12);
+    --border2: rgba(0,255,180,0.22);
+    --green: #00ffb4;
+    --green2: #00cc90;
+    --red: #ff3b5c;
+    --yellow: #ffcc00;
+    --blue: #2af;
+    --purple: #c084fc;
+    --orange: #ff8c42;
+    --dim: rgba(255,255,255,0.35);
+    --dimmer: rgba(255,255,255,0.15);
+    --text: rgba(255,255,255,0.88);
+    --mono: 'JetBrains Mono', 'Share Tech Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg0);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg1);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .header-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .header-title .logo {
+    width: 28px; height: 28px;
+    border: 1.5px solid var(--green);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+
+  .logo-dot {
+    width: 8px; height: 8px;
+    background: var(--green);
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+
+  .title-text {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--green);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .title-sub {
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.12em;
+  }
+
+  .header-status {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-size: 11px;
+    color: var(--dim);
+  }
+
+  .status-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: middle;
+  }
+
+  .status-dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; }
+  .status-dot.red { background: var(--red); box-shadow: 0 0 6px var(--red); animation: pulse 0.8s infinite; }
+  .status-dot.yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+
+  /* ── Layout ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr 340px;
+    grid-template-rows: auto 1fr;
+    gap: 1px;
+    height: calc(100vh - 57px);
+    background: var(--border);
+  }
+
+  .panel {
+    background: var(--bg1);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel-header {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .panel-label {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--dim);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .panel-badge {
+    font-size: 10px;
+    color: var(--green);
+    background: rgba(0,255,180,0.08);
+    border: 1px solid rgba(0,255,180,0.2);
+    padding: 2px 7px;
+    border-radius: 3px;
+  }
+
+  /* ── Left panel: Config + Stats ── */
+  .left-panel {
+    grid-column: 1;
+    grid-row: 1 / 3;
+  }
+
+  .config-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .config-title {
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .attack-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .attack-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+
+  .attack-item:hover {
+    border-color: var(--border2);
+    background: rgba(0,255,180,0.03);
+  }
+
+  .attack-item.selected {
+    border-color: rgba(0,255,180,0.35);
+    background: rgba(0,255,180,0.06);
+  }
+
+  .attack-check {
+    width: 14px; height: 14px;
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .attack-item.selected .attack-check {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .attack-check::after {
+    content: '';
+    width: 8px; height: 5px;
+    border-left: 1.5px solid var(--bg0);
+    border-bottom: 1.5px solid var(--bg0);
+    transform: rotate(-45deg) translateY(-1px);
+    display: none;
+  }
+
+  .attack-item.selected .attack-check::after { display: block; }
+
+  .attack-name {
+    flex: 1;
+    font-size: 11px;
+    color: var(--text);
+  }
+
+  .attack-sev {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 5px;
+    border-radius: 2px;
+    letter-spacing: 0.05em;
+  }
+
+  .sev-CRITICAL { color: var(--red); background: rgba(255,59,92,0.12); border: 1px solid rgba(255,59,92,0.25); }
+  .sev-HIGH { color: var(--orange); background: rgba(255,140,66,0.12); border: 1px solid rgba(255,140,66,0.25); }
+  .sev-MEDIUM { color: var(--yellow); background: rgba(255,204,0,0.1); border: 1px solid rgba(255,204,0,0.2); }
+
+  .speed-section {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .speed-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  .speed-row input[type=range] {
+    flex: 1;
+    accent-color: var(--green);
+    height: 3px;
+  }
+
+  .speed-val {
+    font-size: 11px;
+    color: var(--green);
+    min-width: 30px;
+    text-align: right;
+  }
+
+  .run-btn {
+    margin: 16px;
+    width: calc(100% - 32px);
+    padding: 11px;
+    background: transparent;
+    border: 1.5px solid var(--green);
+    color: var(--green);
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .run-btn:hover {
+    background: rgba(0,255,180,0.08);
+    box-shadow: 0 0 20px rgba(0,255,180,0.15);
+  }
+
+  .run-btn:disabled {
+    border-color: var(--dimmer);
+    color: var(--dimmer);
+    cursor: not-allowed;
+    box-shadow: none;
+    background: transparent;
+  }
+
+  .run-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(0,255,180,0.1), transparent);
+    transform: translateX(-100%);
+  }
+
+  .run-btn.running::before {
+    animation: sweep 1.5s linear infinite;
+  }
+
+  @keyframes sweep {
+    to { transform: translateX(200%); }
+  }
+
+  /* Stats grid */
+  .stats-grid {
+    padding: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .stat-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+  }
+
+  .stat-label {
+    font-size: 9px;
+    color: var(--dimmer);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .stat-val {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--green);
+    line-height: 1;
+  }
+
+  .stat-val.red { color: var(--red); }
+  .stat-val.yellow { color: var(--yellow); }
+  .stat-val.blue { color: var(--blue); }
+  .stat-val.purple { color: var(--purple); }
+
+  /* ── Center panel ── */
+  .center-top {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 200px;
+    max-height: 200px;
+  }
+
+  .center-bottom {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .chart-wrap {
+    padding: 12px 16px 8px;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Event log */
+  .event-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+    scroll-behavior: smooth;
+  }
+
+  .event-log::-webkit-scrollbar { width: 4px; }
+  .event-log::-webkit-scrollbar-track { background: var(--bg1); }
+  .event-log::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .log-line {
+    display: flex;
+    gap: 10px;
+    padding: 5px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    animation: fadeIn 0.2s ease-out;
+    align-items: flex-start;
+    font-size: 11.5px;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateX(-4px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .log-time {
+    color: var(--dimmer);
+    flex-shrink: 0;
+    font-size: 10px;
+    margin-top: 1px;
+    letter-spacing: 0.04em;
+  }
+
+  .log-tag {
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 2px;
+    letter-spacing: 0.06em;
+    margin-top: 1px;
+  }
+
+  .tag-INFO { color: var(--dim); background: rgba(255,255,255,0.05); }
+  .tag-CRITICAL { color: var(--red); background: rgba(255,59,92,0.12); }
+  .tag-HIGH { color: var(--orange); background: rgba(255,140,66,0.12); }
+  .tag-MEDIUM { color: var(--yellow); background: rgba(255,204,0,0.1); }
+  .tag-DETECT { color: var(--purple); background: rgba(192,132,252,0.12); }
+  .tag-BLOCK { color: var(--green); background: rgba(0,255,180,0.1); }
+  .tag-RECOVERY { color: var(--blue); background: rgba(34,170,255,0.1); }
+
+  .log-msg {
+    flex: 1;
+    color: var(--text);
+    line-height: 1.5;
+    word-break: break-all;
+  }
+
+  .log-line.log-attack { background: rgba(255,59,92,0.04); }
+  .log-line.log-detect { background: rgba(192,132,252,0.04); }
+  .log-line.log-block { background: rgba(0,255,180,0.03); }
+
+  /* ── Right panel: Active threats ── */
+  .right-panel {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+
+  .threat-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  .threat-list::-webkit-scrollbar { width: 4px; }
+  .threat-list::-webkit-scrollbar-track { background: var(--bg1); }
+  .threat-list::-webkit-scrollbar-thumb { background: var(--border2); }
+
+  .threat-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    animation: slideIn 0.3s ease-out;
+    transition: border-color 0.3s;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .threat-card.active { border-color: rgba(255,59,92,0.4); }
+  .threat-card.mitigated { border-color: rgba(0,255,180,0.25); opacity: 0.65; }
+
+  .threat-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .threat-indicator {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .threat-card.active .threat-indicator {
+    background: var(--red);
+    box-shadow: 0 0 6px var(--red);
+    animation: pulse 0.8s infinite;
+  }
+
+  .threat-card.mitigated .threat-indicator {
+    background: var(--green);
+    box-shadow: 0 0 4px var(--green);
+  }
+
+  .threat-name {
+    font-size: 11px;
+    font-weight: 700;
+    flex: 1;
+    color: var(--text);
+  }
+
+  .threat-sev {
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .threat-body {
+    font-size: 10px;
+    color: var(--dim);
+    line-height: 1.5;
+    margin-bottom: 6px;
+  }
+
+  .threat-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .threat-tag {
+    font-size: 9px;
+    color: var(--dimmer);
+    background: rgba(255,255,255,0.04);
+    padding: 2px 6px;
+    border-radius: 2px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .threat-status {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 2px;
+    margin-left: auto;
+  }
+
+  .threat-status.active { color: var(--red); background: rgba(255,59,92,0.12); border: 1px solid rgba(255,59,92,0.25); }
+  .threat-status.mitigated { color: var(--green); background: rgba(0,255,180,0.1); border: 1px solid rgba(0,255,180,0.2); }
+
+  /* Progress bar in threat card */
+  .threat-progress {
+    height: 2px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 1px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+
+  .threat-progress-fill {
+    height: 100%;
+    background: var(--red);
+    border-radius: 1px;
+    transition: width 0.5s linear;
+  }
+
+  .threat-card.mitigated .threat-progress-fill {
+    background: var(--green);
+    width: 100% !important;
+  }
+
+  /* Phase banner */
+  .phase-banner {
+    padding: 8px 16px;
+    background: rgba(0,255,180,0.05);
+    border-bottom: 1px solid rgba(0,255,180,0.15);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--green);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    display: none;
+    animation: fadeIn 0.3s;
+  }
+
+  .phase-banner.visible { display: flex; align-items: center; gap: 8px; }
+  .phase-banner.attack { color: var(--red); background: rgba(255,59,92,0.05); border-color: rgba(255,59,92,0.2); }
+  .phase-banner.recovery { color: var(--blue); background: rgba(34,170,255,0.04); border-color: rgba(34,170,255,0.15); }
+
+  /* Summary section */
+  .summary-section {
+    display: none;
+    padding: 16px;
+    border-top: 1px solid var(--border);
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .summary-section.visible { display: flex; }
+
+  .summary-title {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--green);
+    margin-bottom: 4px;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .summary-item .key {
+    font-size: 9px;
+    color: var(--dimmer);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .summary-item .val {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 120px;
+    color: var(--dimmer);
+    font-size: 11px;
+    gap: 6px;
+  }
+
+  .empty-icon {
+    font-size: 24px;
+    opacity: 0.3;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">
+    <div class="logo"><div class="logo-dot"></div></div>
+    <div>
+      <div class="title-text">IDS / IPS Simulation</div>
+      <div class="title-sub">Network Threat Detection &amp; Mitigation v1.0</div>
+    </div>
+  </div>
+  <div class="header-status">
+    <span><span class="status-dot green" id="sys-dot"></span><span id="sys-status">SYSTEM READY</span></span>
+    <span id="clock" style="color:var(--dimmer)"></span>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- ── Left: Config ── -->
+  <div class="panel left-panel">
+    <div class="panel-header">
+      <span class="panel-label">Attack Selector</span>
+      <span class="panel-badge" id="sel-count">0 selected</span>
+    </div>
+
+    <div class="config-section">
+      <div class="config-title">Select attack types</div>
+      <div class="attack-list" id="attack-list"></div>
+    </div>
+
+    <div class="speed-section">
+      <div class="config-title">Simulation speed</div>
+      <div class="speed-row">
+        <span style="font-size:10px;color:var(--dimmer)">Fast</span>
+        <input type="range" min="50" max="1200" value="400" id="speed-slider" step="50">
+        <span style="font-size:10px;color:var(--dimmer)">Slow</span>
+        <span class="speed-val" id="speed-val">0.4s</span>
+      </div>
+    </div>
+
+    <button class="run-btn" id="run-btn" disabled>▶ Run Simulation</button>
+
+    <div class="panel-header" style="margin-top:auto">
+      <span class="panel-label">Live Statistics</span>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">Packets</div><div class="stat-val" id="s-pkts">0</div></div>
+      <div class="stat-card"><div class="stat-label">Alerts</div><div class="stat-val red" id="s-alerts">0</div></div>
+      <div class="stat-card"><div class="stat-label">Blocked IPs</div><div class="stat-val yellow" id="s-blocked">0</div></div>
+      <div class="stat-card"><div class="stat-label">Mitigated</div><div class="stat-val" id="s-mitigated">0</div></div>
+      <div class="stat-card"><div class="stat-label">FW Rules</div><div class="stat-val blue" id="s-rules">0</div></div>
+      <div class="stat-card"><div class="stat-label">Quarantine</div><div class="stat-val purple" id="s-quarantine">0</div></div>
+    </div>
+  </div>
+
+  <!-- ── Center top: Traffic chart ── -->
+  <div class="panel center-top">
+    <div class="panel-header">
+      <span class="panel-label">Traffic Monitor — Packets per Second</span>
+      <span class="panel-badge" id="pps-badge">0 pps</span>
+    </div>
+    <div class="chart-wrap" style="padding:8px 14px 6px">
+      <canvas id="traffic-chart" role="img" aria-label="Live network traffic chart showing packets per second over time"></canvas>
+    </div>
+  </div>
+
+  <!-- ── Center bottom: Event log ── -->
+  <div class="panel center-bottom" style="display:flex;flex-direction:column;">
+    <div class="panel-header" style="flex-shrink:0">
+      <span class="panel-label">Event Log</span>
+      <span class="panel-badge" id="log-count">0 events</span>
+    </div>
+    <div class="phase-banner" id="phase-banner">
+      <span id="phase-text">Phase 1 — Baseline Monitoring</span>
+    </div>
+    <div class="event-log" id="event-log">
+      <div class="empty-state">
+        <div class="empty-icon">⬡</div>
+        <div>No events yet — configure and run simulation</div>
+      </div>
+    </div>
+    <div class="summary-section" id="summary-section">
+      <div class="summary-title">▸ Simulation Complete</div>
+      <div class="summary-grid" id="summary-grid"></div>
+    </div>
+  </div>
+
+  <!-- ── Right: Threat cards ── -->
+  <div class="panel right-panel">
+    <div class="panel-header">
+      <span class="panel-label">Active Threats</span>
+      <span class="panel-badge" id="threat-count">0</span>
+    </div>
+    <div class="threat-list" id="threat-list">
+      <div class="empty-state">
+        <div class="empty-icon">◈</div>
+        <div>No active threats</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+//  DATA DEFINITIONS (ported from Python)
+// ─────────────────────────────────────────────────────────────
+
+const NORMAL_PPS_MIN = 500, NORMAL_PPS_MAX = 2000;
+const ANOMALY_THRESHOLD = 3.5;
+const AUTO_BLOCK_CHANCE = 0.80;
+
+const SIGNATURES = {
+  SQL_INJECT_1: "' OR '1'='1",
+  SQL_INJECT_2: "UNION SELECT",
+  XSS_BASIC:    "<script>alert(",
+  XSS_IMG:      "<img src=x onerror=",
+  CMD_INJECT:   "; /bin/sh",
+  PATH_TRAV:    "../../etc/passwd",
+  C2_BEACON:    "Mozilla/4.0 (compatible; MSIE 6.0)",
+  SHELLCODE:    "\\x90\\x90\\x90\\x90",
+};
+
+const ATTACKS = {
+  ddos: {
+    name: "DDoS Volumetric Flood", type: "volumetric", ppsMult: 60,
+    duration: 10, severity: "CRITICAL",
+    description: "Massive UDP/ICMP flood overwhelming bandwidth",
+    mitigation: "Null-route applied; upstream scrubbing centre alerted",
+    ports: [80, 443, 53],
+  },
+  bruteforce: {
+    name: "SSH Brute-force", type: "auth", ppsMult: 3,
+    duration: 9, severity: "CRITICAL",
+    description: "Repeated failed SSH authentication attempts",
+    mitigation: "Source IP blocked; fail2ban rule inserted; auth locked",
+    ports: [22],
+  },
+  sqlinject: {
+    name: "SQL Injection", type: "payload", ppsMult: 1.3,
+    duration: 6, severity: "HIGH",
+    description: "Malicious SQL payloads targeting web application DB",
+    mitigation: "WAF rule matched; connection reset; payload logged",
+    ports: [80, 443, 3306], signature: "SQL_INJECT_1",
+  },
+  portscan: {
+    name: "Stealth Port Scan", type: "reconnaissance", ppsMult: 1.8,
+    duration: 7, severity: "MEDIUM",
+    description: "SYN scan probing open ports across host range",
+    mitigation: "Port scan detected; source quarantined; scan logged",
+    ports: Array.from({length:20}, (_,i)=>i+1),
+  },
+  xss: {
+    name: "XSS Payload Injection", type: "payload", ppsMult: 1.2,
+    duration: 5, severity: "HIGH",
+    description: "Cross-site scripting payloads in HTTP parameters",
+    mitigation: "Input sanitised; response blocked; session invalidated",
+    ports: [80, 443], signature: "XSS_BASIC",
+  },
+  c2: {
+    name: "C2 Beaconing", type: "exfiltration", ppsMult: 1.5,
+    duration: 12, severity: "CRITICAL",
+    description: "Compromised host beaconing to command-and-control server",
+    mitigation: "Outbound C2 traffic blocked; endpoint isolated; IR started",
+    ports: [443, 8080, 4444], signature: "C2_BEACON",
+  },
+  ransomware: {
+    name: "Ransomware Lateral Movement", type: "intrusion", ppsMult: 2.5,
+    duration: 11, severity: "CRITICAL",
+    description: "Ransomware spreading laterally via SMB/RDP",
+    mitigation: "SMB/RDP blocked; host isolated; snapshot initiated",
+    ports: [445, 3389, 139],
+  },
+};
+
+const PROTOCOLS = ["TCP","UDP","ICMP","HTTP","HTTPS","DNS"];
+
+// ─────────────────────────────────────────────────────────────
+//  UTILITY
+// ─────────────────────────────────────────────────────────────
+
+function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+function randFloat(a,b){ return Math.random()*(b-a)+a; }
+function randIP(priv=false){
+  if(priv){
+    const s=["192.168.1.","10.0.0.","172.16.0."];
+    return s[randInt(0,2)]+randInt(1,254);
+  }
+  const s=["203.0.113.","198.51.100.","185.220.101.","91.108.4.","45.33.32."];
+  return s[randInt(0,4)]+randInt(1,254);
+}
+function randPort(){ return [80,443,22,53,8080,3306,25,110,3389,445][randInt(0,9)]; }
+function fakeHash(){ return Math.random().toString(16).slice(2,14); }
+function ts(){ return new Date().toTimeString().slice(0,8)+'.'+String(Date.now()%1000).padStart(3,'0'); }
+
+// ─────────────────────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────────────────────
+
+let simState = {
+  running: false,
+  baseline: 1200,
+  trafficWindow: [],
+  totalPackets: 0,
+  totalAlerts: 0,
+  blockedIPs: new Set(),
+  fwRules: [],
+  quarantined: new Set(),
+  mitigatedCount: 0,
+  logCount: 0,
+  threats: [],
+  ipCounters: {},
+  portHits: {},
+  authFailures: {},
+};
+
+let tickDelay = 400;
+let selectedAttacks = new Set();
+let simAbort = false;
+
+// ─────────────────────────────────────────────────────────────
+//  CHART
+// ─────────────────────────────────────────────────────────────
+
+const CHART_LEN = 60;
+const chartLabels = Array(CHART_LEN).fill('');
+const chartData = Array(CHART_LEN).fill(0);
+const thresholdData = Array(CHART_LEN).fill(0);
+
+const ctx = document.getElementById('traffic-chart').getContext('2d');
+const trafficChart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: chartLabels,
+    datasets: [
+      {
+        label: 'Traffic (pps)',
+        data: chartData,
+        borderColor: '#00ffb4',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: true,
+        backgroundColor: 'rgba(0,255,180,0.07)',
+        tension: 0.4,
+      },
+      {
+        label: 'Anomaly threshold',
+        data: thresholdData,
+        borderColor: 'rgba(255,59,92,0.5)',
+        borderWidth: 1,
+        borderDash: [4,4],
+        pointRadius: 0,
+        fill: false,
+        tension: 0,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 0 },
+    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+    scales: {
+      x: {
+        display: false,
+      },
+      y: {
+        min: 0,
+        grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+        ticks: {
+          color: 'rgba(255,255,255,0.25)',
+          font: { family: "'JetBrains Mono', monospace", size: 10 },
+          callback: v => v >= 1000 ? (v/1000).toFixed(0)+'k' : v,
+          maxTicksLimit: 5,
+        },
+        border: { display: false }
+      }
+    }
+  }
+});
+
+function pushTraffic(pps) {
+  chartData.shift(); chartData.push(Math.round(pps));
+  const thresh = simState.baseline * ANOMALY_THRESHOLD;
+  thresholdData.shift(); thresholdData.push(Math.round(thresh));
+  trafficChart.update('none');
+  document.getElementById('pps-badge').textContent = pps.toLocaleString() + ' pps';
+}
+
+// ─────────────────────────────────────────────────────────────
+//  LOGGING
+// ─────────────────────────────────────────────────────────────
+
+function log(level, msg, cls='') {
+  const log = document.getElementById('event-log');
+  // remove empty state
+  const empty = log.querySelector('.empty-state');
+  if (empty) empty.remove();
+
+  const line = document.createElement('div');
+  line.className = `log-line ${cls}`;
+  line.innerHTML = `
+    <span class="log-time">${ts()}</span>
+    <span class="log-tag tag-${level}">${level}</span>
+    <span class="log-msg">${msg}</span>
+  `;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+
+  simState.logCount++;
+  document.getElementById('log-count').textContent = simState.logCount + ' events';
+}
+
+function setPhase(text, type='') {
+  const b = document.getElementById('phase-banner');
+  b.className = 'phase-banner visible' + (type ? ' '+type : '');
+  document.getElementById('phase-text').textContent = text;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  STATS UPDATE
+// ─────────────────────────────────────────────────────────────
+
+function updateStats() {
+  document.getElementById('s-pkts').textContent = simState.totalPackets.toLocaleString();
+  document.getElementById('s-alerts').textContent = simState.totalAlerts;
+  document.getElementById('s-blocked').textContent = simState.blockedIPs.size;
+  document.getElementById('s-mitigated').textContent = simState.mitigatedCount;
+  document.getElementById('s-rules').textContent = simState.fwRules.length;
+  document.getElementById('s-quarantine').textContent = simState.quarantined.size;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  THREAT CARDS
+// ─────────────────────────────────────────────────────────────
+
+function addThreat(atk, atkKey, srcIP) {
+  const list = document.getElementById('threat-list');
+  const empty = list.querySelector('.empty-state');
+  if (empty) empty.remove();
+
+  const id = 'threat-' + Date.now();
+  const card = document.createElement('div');
+  card.id = id;
+  card.className = 'threat-card active';
+  card.innerHTML = `
+    <div class="threat-header">
+      <div class="threat-indicator"></div>
+      <div class="threat-name">${atk.name}</div>
+      <div class="threat-sev sev-${atk.severity}">${atk.severity}</div>
+    </div>
+    <div class="threat-body">${atk.description}</div>
+    <div class="threat-meta">
+      <span class="threat-tag">${srcIP}</span>
+      <span class="threat-tag">${atk.type.toUpperCase()}</span>
+      <span class="threat-tag">PORT ${atk.ports[0]}</span>
+      <span class="threat-status active" id="${id}-status">ACTIVE</span>
+    </div>
+    <div class="threat-progress">
+      <div class="threat-progress-fill" id="${id}-prog" style="width:5%"></div>
+    </div>
+  `;
+  list.insertBefore(card, list.firstChild);
+  document.getElementById('threat-count').textContent = list.querySelectorAll('.threat-card').length;
+  return id;
+}
+
+function updateThreatProgress(id, pct) {
+  const el = document.getElementById(id+'-prog');
+  if (el) el.style.width = Math.min(100, pct) + '%';
+}
+
+function mitigateThreat(id) {
+  const card = document.getElementById(id);
+  if (!card) return;
+  card.className = 'threat-card mitigated';
+  const st = document.getElementById(id+'-status');
+  if (st) { st.className = 'threat-status mitigated'; st.textContent = 'MITIGATED'; }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  DETECTION ENGINE
+// ─────────────────────────────────────────────────────────────
+
+function updateBaseline(pps) {
+  simState.trafficWindow.push(pps);
+  if (simState.trafficWindow.length > 10) simState.trafficWindow.shift();
+  if (simState.trafficWindow.length >= 5) {
+    simState.baseline = simState.trafficWindow.reduce((a,b)=>a+b,0) / simState.trafficWindow.length;
+  }
+}
+
+function anomalyCheck(pps) {
+  if (simState.trafficWindow.length < 5) return { detected: false, z: 0 };
+  const mean = simState.baseline;
+  const variance = simState.trafficWindow.reduce((a,b)=>a+(b-mean)**2,0) / simState.trafficWindow.length;
+  const std = Math.sqrt(variance) || 1;
+  const z = (pps - mean) / std;
+  return { detected: z > ANOMALY_THRESHOLD, z: +z.toFixed(2) };
+}
+
+function signatureCheck(payload) {
+  for (const [name, pattern] of Object.entries(SIGNATURES)) {
+    if (payload.toLowerCase().includes(pattern.toLowerCase())) return { hit: true, name };
+  }
+  return { hit: false };
+}
+
+function runDetection(atkKey, atk, srcIP, pps) {
+  const findings = [];
+  const packetCount = Math.floor(pps / 8);
+  simState.totalPackets += packetCount;
+
+  if (!simState.ipCounters[srcIP]) simState.ipCounters[srcIP] = 0;
+  if (!simState.portHits[srcIP]) simState.portHits[srcIP] = new Set();
+  if (!simState.authFailures[srcIP]) simState.authFailures[srcIP] = 0;
+
+  simState.ipCounters[srcIP] += packetCount;
+
+  // Port hits (for port scan)
+  for (const p of atk.ports.slice(0,20)) simState.portHits[srcIP].add(p);
+
+  // Auth failures for SSH
+  if (atk.type === 'auth') simState.authFailures[srcIP] += randInt(6, 20);
+
+  // Signature
+  if (atk.signature) {
+    const payload = SIGNATURES[atk.signature] || '';
+    const { hit, name } = signatureCheck(payload);
+    if (hit) findings.push({ method: 'SIGNATURE', detail: `Signature match: ${name} on port ${atk.ports[0]}`, severity: 'HIGH' });
+  }
+
+  // Anomaly
+  updateBaseline(pps);
+  const { detected, z } = anomalyCheck(pps);
+  if (detected) findings.push({ method: 'ANOMALY', detail: `Traffic anomaly — z-score ${z} (threshold ${ANOMALY_THRESHOLD})`, severity: 'CRITICAL' });
+
+  // Rate
+  if (simState.ipCounters[srcIP] > 500) findings.push({ method: 'RATE', detail: `Rate limit exceeded: ${simState.ipCounters[srcIP].toLocaleString()} pkts from ${srcIP}`, severity: 'CRITICAL' });
+
+  // Port scan
+  if (simState.portHits[srcIP].size > 20) findings.push({ method: 'HEURISTIC', detail: `Port scan: ${simState.portHits[srcIP].size} ports probed by ${srcIP}`, severity: 'MEDIUM' });
+
+  // Brute force
+  if (simState.authFailures[srcIP] > 5) findings.push({ method: 'HEURISTIC', detail: `Brute-force: ${simState.authFailures[srcIP]} failed auths from ${srcIP}`, severity: 'CRITICAL' });
+
+  // Ensure at least one finding
+  if (findings.length === 0) findings.push({ method: 'ANOMALY', detail: `Anomaly pattern matched — ${atk.name}`, severity: atk.severity });
+
+  simState.totalAlerts += findings.length;
+  return findings;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  MITIGATION ENGINE
+// ─────────────────────────────────────────────────────────────
+
+function mitigateAlert(alert, atk, srcIP) {
+  const actions = [];
+  if (Math.random() <= AUTO_BLOCK_CHANCE) {
+    const m = alert.method;
+    if (m === 'ANOMALY' || atk.type === 'volumetric') {
+      actions.push(`Null-route applied for ${srcIP} — traffic black-holed`);
+      actions.push('Upstream scrubbing centre notified via BGP Blackhole');
+      simState.fwRules.push(`NULLROUTE ${srcIP}`);
+      simState.blockedIPs.add(srcIP);
+    } else if (m === 'RATE') {
+      simState.fwRules.push(`DROP src=${srcIP} reason=rate-exceeded`);
+      simState.fwRules.push(`RATE_LIMIT src=${srcIP} max=100pps`);
+      simState.blockedIPs.add(srcIP);
+      actions.push(`Firewall rule: DROP src=${srcIP}`);
+      actions.push(`Rate limit enforced: max 100pps`);
+    } else if (m === 'SIGNATURE') {
+      const sig = alert.detail.match(/: (\w+) on/)?.[1] || 'UNKNOWN';
+      simState.fwRules.push(`WAF_BLOCK sig=${sig}`);
+      simState.blockedIPs.add(srcIP);
+      actions.push(`WAF rule activated for signature ${sig}`);
+      actions.push(`Connection reset; payload quarantined`);
+    } else if (m === 'HEURISTIC') {
+      if (alert.detail.includes('Brute')) {
+        simState.fwRules.push(`DROP src=${srcIP} reason=brute-force`);
+        simState.blockedIPs.add(srcIP);
+        actions.push(`Source blocked: ${srcIP}`);
+        actions.push(`fail2ban rule updated — IP banned 24h`);
+      } else {
+        simState.quarantined.add(srcIP);
+        actions.push(`Host ${srcIP} moved to quarantine VLAN`);
+      }
+    }
+    actions.push(atk.mitigation);
+    simState.mitigatedCount++;
+    return { success: true, actions };
+  } else {
+    return { success: false, actions: [`[!] Auto-mitigation failed for ${srcIP} — manual review required`] };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  SLEEP HELPER
+// ─────────────────────────────────────────────────────────────
+
+function sleep(ms) {
+  return new Promise(res => {
+    const t = setTimeout(res, ms);
+    // allow abort
+    const check = setInterval(()=>{ if(simAbort){ clearInterval(check); clearTimeout(t); res(); }}, 50);
+    setTimeout(()=>clearInterval(check), ms+100);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+//  SIMULATION PHASES
+// ─────────────────────────────────────────────────────────────
+
+async function runBaseline() {
+  setPhase('▸ Phase 1 — Baseline Monitoring');
+  log('INFO', 'Initialising IDS/IPS engine...');
+  await sleep(tickDelay * 0.5);
+  log('INFO', `Loading ${Object.keys(SIGNATURES).length} attack signatures into detection engine`);
+  log('INFO', `Anomaly detection threshold: z-score > ${ANOMALY_THRESHOLD}`);
+  log('INFO', 'Starting network baseline collection...');
+
+  for (let i = 0; i < 6; i++) {
+    if (simAbort) return;
+    const pps = randInt(NORMAL_PPS_MIN, NORMAL_PPS_MAX);
+    updateBaseline(pps);
+    pushTraffic(pps);
+    simState.totalPackets += Math.floor(pps / 10);
+    log('INFO', `Tick ${i+1}/6 — Traffic: ${pps.toLocaleString()} pps  |  Baseline: ${Math.round(simState.baseline).toLocaleString()} pps`);
+    updateStats();
+    await sleep(tickDelay);
+  }
+  log('INFO', `Baseline established: ${Math.round(simState.baseline).toLocaleString()} pps — monitoring active`);
+}
+
+async function runAttacks() {
+  setPhase('▸ Phase 2 — Attack Simulation & Detection', 'attack');
+  const attacks = [...selectedAttacks];
+
+  for (let idx = 0; idx < attacks.length; idx++) {
+    if (simAbort) return;
+    const atkKey = attacks[idx];
+    const atk = ATTACKS[atkKey];
+    const srcIP = randIP(false);
+    const pps = Math.round(NORMAL_PPS_MAX * atk.ppsMult);
+
+    log(atk.severity, `━━ ATTACK ${idx+1}/${attacks.length}: ${atk.name.toUpperCase()} ━━`, 'log-attack');
+    log(atk.severity, `Origin: ${srcIP}  |  Type: ${atk.type.toUpperCase()}  |  Rate: ${pps.toLocaleString()} pps`);
+    pushTraffic(pps);
+
+    if (atk.type === 'payload' && atk.signature) {
+      const sample = SIGNATURES[atk.signature]?.slice(0,35) || '';
+      log('DETECT', `Payload intercepted: "${sample}..."`, 'log-detect');
+    }
+
+    await sleep(tickDelay * 0.6);
+
+    // Add threat card
+    const threatId = addThreat(atk, atkKey, srcIP);
+
+    // Detection
+    log('INFO', `Running 4 detection methods against incoming packet stream...`);
+    const findings = runDetection(atkKey, atk, srcIP, pps);
+    updateStats();
+
+    for (let fi = 0; fi < Math.min(findings.length, 4); fi++) {
+      if (simAbort) return;
+      const f = findings[fi];
+      log('DETECT', `[${f.method}] ${f.detail}`, 'log-detect');
+      updateThreatProgress(threatId, ((fi+1)/findings.length)*50);
+      await sleep(tickDelay * 0.3);
+    }
+
+    await sleep(tickDelay * 0.5);
+
+    // Mitigation
+    log('INFO', 'Triggering automated mitigation pipeline...');
+    const { success, actions } = mitigateAlert(findings[0], atk, srcIP);
+
+    for (const action of actions) {
+      if (simAbort) return;
+      const lvl = action.includes('[!]') ? 'HIGH' : 'BLOCK';
+      log(lvl, action, action.includes('[!]') ? '' : 'log-block');
+      await sleep(tickDelay * 0.25);
+    }
+
+    updateThreatProgress(threatId, 100);
+    mitigateThreat(threatId);
+
+    if (success) {
+      log('BLOCK', `Threat contained — ${srcIP} neutralised  [hash:${fakeHash()}]`, 'log-block');
+    } else {
+      log('HIGH', `Partial mitigation — ${srcIP} flagged for manual review`);
+    }
+
+    updateStats();
+
+    // Recovery ticks
+    log('INFO', 'Monitoring recovery — anomaly score decaying...');
+    for (let t = 0; t < 3; t++) {
+      if (simAbort) return;
+      const decayPPS = Math.round(pps * (0.6 - t * 0.2));
+      updateBaseline(decayPPS);
+      pushTraffic(decayPPS);
+      log('INFO', `  Recovery tick ${t+1}/3 — ${decayPPS.toLocaleString()} pps`);
+      await sleep(tickDelay * 0.5);
+    }
+    await sleep(tickDelay * 0.4);
+  }
+}
+
+async function runRecovery() {
+  setPhase('▸ Phase 3 — System Recovery', 'recovery');
+  log('RECOVERY', 'Restoring normal traffic baseline...');
+
+  for (let i = 0; i < 4; i++) {
+    if (simAbort) return;
+    const pps = randInt(NORMAL_PPS_MIN, NORMAL_PPS_MAX);
+    updateBaseline(pps);
+    pushTraffic(pps);
+    log('RECOVERY', `Recovery tick ${i+1}/4 — ${pps.toLocaleString()} pps — ${i > 1 ? 'Stable' : 'Recovering'}`);
+    await sleep(tickDelay * 0.5);
+  }
+
+  log('BLOCK', `Firewall rules committed: ${simState.fwRules.length}`, 'log-block');
+  log('BLOCK', `Quarantined hosts: ${simState.quarantined.size}`, 'log-block');
+  log('BLOCK', 'System returned to NORMAL operating state', 'log-block');
+}
+
+function showSummary() {
+  setPhase('▸ Simulation Complete');
+  document.getElementById('phase-banner').className = 'phase-banner visible';
+
+  const grid = document.getElementById('summary-grid');
+  const items = [
+    ['Total Packets', simState.totalPackets.toLocaleString()],
+    ['Alerts', simState.totalAlerts],
+    ['Attacks', selectedAttacks.size],
+    ['Mitigated', simState.mitigatedCount],
+    ['IPs Blocked', simState.blockedIPs.size],
+    ['Quarantined', simState.quarantined.size],
+    ['FW Rules', simState.fwRules.length],
+    ['Auto-block rate', '80%'],
+  ];
+  grid.innerHTML = items.map(([k,v])=>
+    `<div class="summary-item"><div class="key">${k}</div><div class="val">${v}</div></div>`
+  ).join('');
+  document.getElementById('summary-section').className = 'summary-section visible';
+}
+
+// ─────────────────────────────────────────────────────────────
+//  SIM CONTROLLER
+// ─────────────────────────────────────────────────────────────
+
+async function runSimulation() {
+  // Reset state
+  simAbort = false;
+  simState = {
+    running: true,
+    baseline: 1200,
+    trafficWindow: [],
+    totalPackets: 0,
+    totalAlerts: 0,
+    blockedIPs: new Set(),
+    fwRules: [],
+    quarantined: new Set(),
+    mitigatedCount: 0,
+    logCount: 0,
+    threats: [],
+    ipCounters: {},
+    portHits: {},
+    authFailures: {},
+  };
+
+  // Reset UI
+  document.getElementById('event-log').innerHTML = '';
+  document.getElementById('threat-list').innerHTML = '<div class="empty-state"><div class="empty-icon">◈</div><div>Waiting for threats...</div></div>';
+  document.getElementById('threat-count').textContent = '0';
+  document.getElementById('log-count').textContent = '0 events';
+  document.getElementById('summary-section').className = 'summary-section';
+  chartData.fill(0); thresholdData.fill(0); trafficChart.update('none');
+  updateStats();
+
+  const btn = document.getElementById('run-btn');
+  btn.textContent = '⏹ Stop Simulation';
+  btn.classList.add('running');
+  btn.onclick = stopSim;
+
+  document.getElementById('sys-dot').className = 'status-dot red';
+  document.getElementById('sys-status').textContent = 'SIMULATION RUNNING';
+
+  try {
+    await runBaseline();
+    if (!simAbort) await runAttacks();
+    if (!simAbort) await runRecovery();
+    if (!simAbort) showSummary();
+  } catch(e) {
+    log('HIGH', 'Simulation error: ' + e.message);
+  }
+
+  simState.running = false;
+  btn.textContent = '▶ Run Again';
+  btn.classList.remove('running');
+  btn.onclick = startSim;
+  btn.disabled = selectedAttacks.size === 0;
+
+  document.getElementById('sys-dot').className = 'status-dot green';
+  document.getElementById('sys-status').textContent = simAbort ? 'SIMULATION ABORTED' : 'SIMULATION COMPLETE';
+}
+
+function stopSim() {
+  simAbort = true;
+  log('HIGH', '[!] Simulation interrupted by user');
+}
+
+function startSim() {
+  runSimulation();
+}
+
+// ─────────────────────────────────────────────────────────────
+//  UI SETUP
+// ─────────────────────────────────────────────────────────────
+
+const SEV_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 };
+
+function buildAttackList() {
+  const list = document.getElementById('attack-list');
+  Object.entries(ATTACKS)
+    .sort((a,b) => SEV_ORDER[a[1].severity] - SEV_ORDER[b[1].severity])
+    .forEach(([key, atk]) => {
+      const item = document.createElement('div');
+      item.className = 'attack-item';
+      item.dataset.key = key;
+      item.innerHTML = `
+        <div class="attack-check"></div>
+        <div class="attack-name">${atk.name}</div>
+        <div class="attack-sev sev-${atk.severity}">${atk.severity}</div>
+      `;
+      item.onclick = () => {
+        if (simState.running) return;
+        if (selectedAttacks.has(key)) {
+          selectedAttacks.delete(key);
+          item.classList.remove('selected');
+        } else {
+          selectedAttacks.add(key);
+          item.classList.add('selected');
+        }
+        const n = selectedAttacks.size;
+        document.getElementById('sel-count').textContent = n + ' selected';
+        document.getElementById('run-btn').disabled = n === 0;
+      };
+      list.appendChild(item);
+    });
+}
+
+function setupSpeedSlider() {
+  const slider = document.getElementById('speed-slider');
+  const val = document.getElementById('speed-val');
+  slider.oninput = () => {
+    tickDelay = parseInt(slider.value);
+    val.textContent = (tickDelay/1000).toFixed(2)+'s';
+  };
+  val.textContent = (tickDelay/1000).toFixed(2)+'s';
+}
+
+function setupClock() {
+  const el = document.getElementById('clock');
+  setInterval(()=> el.textContent = new Date().toTimeString().slice(0,8), 1000);
+}
+
+document.getElementById('run-btn').onclick = startSim;
+
+buildAttackList();
+setupSpeedSlider();
+setupClock();
+</script>
+</body>
+</html>
